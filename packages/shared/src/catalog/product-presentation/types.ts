@@ -153,4 +153,13 @@ export interface ProductPresentationCoreProps {
   onThumbnailReorder?: (fromIndex: number, toIndex: number) => void;
   onColorRemove?: (id: string) => void;
   onSizeRemove?: (id: string) => void;
+  /**
+   * Visual variant. 'default' (omitted) is the original markup used by Seller Studio preview;
+   * 'v5' only adds `zv5-*` hook classes and drops the duplicated delivery/returns copy.
+   */
+  presentation?: 'default' | 'v5';
+  /** Rendered above the brand line in the purchase column. */
+  archiveSlot?: React.ReactNode;
+  /** Rendered between the primary CTA row and the service rows. */
+  passportSlot?: React.ReactNode;
 }

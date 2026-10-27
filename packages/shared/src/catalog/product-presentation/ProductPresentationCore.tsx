@@ -126,7 +126,13 @@ export function ProductPresentationCore({
   renderThumbnailOverlay,
   onThumbnailReorder,
   sellerHref,
+  presentation = 'default',
+  archiveSlot,
+  passportSlot,
 }: ProductPresentationCoreProps) {
+  // 'v5' only adds hook classes and trims duplicated service copy; 'default' output is unchanged (Seller Studio preview).
+  const isV5 = presentation === 'v5';
+  const v5Class = (name: string) => (isV5 ? ` zv5-${name}` : '');
   const [draggedThumbnailIndex, setDraggedThumbnailIndex] = useState<number | null>(null);
   const [dragOverThumbnailIndex, setDragOverThumbnailIndex] = useState<number | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -229,16 +235,16 @@ export function ProductPresentationCore({
 
   return (
     <>
-      <div className="grid grid-cols-1 min-[960px]:grid-cols-[1fr_420px] lg:grid-cols-[1fr_460px] min-[1200px]:grid-cols-[704px_500px] gap-6 lg:gap-8 min-[1200px]:gap-14 items-start">
+      <div className={"grid grid-cols-1 min-[960px]:grid-cols-[1fr_420px] lg:grid-cols-[1fr_460px] min-[1200px]:grid-cols-[704px_500px] gap-6 lg:gap-8 min-[1200px]:gap-14 items-start" + v5Class('grid')}>
         {/* GALLERY: Stable fashion geometry without vertical left rail */}
         <div
-          className="w-full flex flex-col gap-3 items-start outline-none"
+          className={"w-full flex flex-col gap-3 items-start outline-none" + v5Class('gallery')}
           tabIndex={visibleImages.length > 1 ? 0 : undefined}
           onKeyDown={handleGalleryKeyDown}
           aria-label="Галерея товара"
         >
           {visibleImages.length === 0 ? (
-            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3">
+            <div className={"w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3" + v5Class('gallery-col')}>
               {emptyMediaSlot ? (
                 emptyMediaSlot
               ) : mediaAddSlot ? (
@@ -246,7 +252,7 @@ export function ProductPresentationCore({
                   {mediaAddSlot}
                 </div>
               ) : (
-                <div className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none">
+                <div className={"group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none" + v5Class('stage')}>
                   <img
                     src={currentImageUrl}
                     alt={product.name}
@@ -263,11 +269,11 @@ export function ProductPresentationCore({
               )}
             </div>
           ) : (
-            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3">
+            <div className={"w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3" + v5Class('gallery-col')}>
               {/* Main Stage */}
               <div
                 data-testid="pdp-main-stage"
-                className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none"
+                className={"group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none" + v5Class('stage')}
               >
                 <img
                   key={currentImageUrl}
@@ -347,7 +353,7 @@ export function ProductPresentationCore({
               {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
                 <div
                   data-testid="pdp-thumbnails-container"
-                  className="flex gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none w-full"
+                  className={"flex gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none w-full" + v5Class('thumbs')}
                 >
                   {visibleImages.map((image, index) => {
                     const isSelected = currentActiveImage === index;
@@ -416,6 +422,7 @@ export function ProductPresentationCore({
                           aria-label={`Фото ${index + 1}`}
                           className={cn(
                             "w-14 h-[70px] sm:w-16 sm:h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
+                            isV5 && "zv5-thumb",
                             isSelected
                               ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
                               : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
@@ -449,7 +456,8 @@ export function ProductPresentationCore({
         </div>
 
         {/* RIGHT PURCHASE COLUMN: ~456px */}
-        <div className="w-full flex flex-col">
+        <div className={"w-full flex flex-col" + v5Class('buy')}>
+          {archiveSlot}
           {/* BRAND */}
           {product.brand && product.brand !== 'Бренд не указан' && !isUUID(product.brand) ? (
             product.brandId ? (
@@ -459,12 +467,12 @@ export function ProductPresentationCore({
                 tabIndex={brandHref ? undefined : 0}
                 data-testid="product-brand-link"
                 onClick={(e) => handleAnchorClick(e, () => product.brandId && onBrandClick?.(product.brandId))}
-                className="text-xs font-semibold uppercase tracking-widest text-ash hover:text-graphite dark:hover:text-white transition-colors w-fit cursor-pointer"
+                className={"text-xs font-semibold uppercase tracking-widest text-ash hover:text-graphite dark:hover:text-white transition-colors w-fit cursor-pointer" + v5Class('brand')}
               >
                 {product.brand}
               </a>
             ) : (
-              <span data-testid="product-brand-text" className="text-xs font-semibold uppercase tracking-widest text-ash">
+              <span data-testid="product-brand-text" className={"text-xs font-semibold uppercase tracking-widest text-ash" + v5Class('brand')}>
                 {product.brand}
               </span>
             )
@@ -474,14 +482,14 @@ export function ProductPresentationCore({
           {titleSlot ? (
             titleSlot
           ) : (
-            <h1 className="text-[26px] sm:text-[28px] min-[1200px]:text-[32px] leading-[32px] sm:leading-[34px] min-[1200px]:leading-[38px] font-serif text-graphite dark:text-white font-normal mt-1" data-slot="title">
+            <h1 className={"text-[26px] sm:text-[28px] min-[1200px]:text-[32px] leading-[32px] sm:leading-[34px] min-[1200px]:leading-[38px] font-serif text-graphite dark:text-white font-normal mt-1" + v5Class('title')} data-slot="title">
               {product.name}
             </h1>
           )}
 
           {/* COMPACT RATING */}
           {product.rating ? (
-            <div className="flex items-center gap-1.5 mt-2 text-xs sm:text-sm text-graphite dark:text-white">
+            <div className={"flex items-center gap-1.5 mt-2 text-xs sm:text-sm text-graphite dark:text-white" + v5Class('rating')}>
               <span className="text-amber-500 text-xs">★</span>
               <span className="font-medium">{product.rating.toFixed(1).replace('.', ',')}</span>
               {reviewsCountText && (
@@ -503,7 +511,7 @@ export function ProductPresentationCore({
           {priceSlot ? (
             priceSlot
           ) : (
-            <div className="mt-3.5 flex items-baseline gap-3" data-slot="price">
+            <div className={"mt-3.5 flex items-baseline gap-3" + v5Class('price')} data-slot="price">
               {product.discountPrice ? (
                 <>
                   <span className="text-[26px] min-[1200px]:text-[28px] font-semibold text-red-600 dark:text-red-400">
@@ -753,8 +761,11 @@ export function ProductPresentationCore({
             </PresentationButton>
           </div>
 
+          {passportSlot}
+
           {/* COMPACT TEXTUAL SERVICE ROWS */}
-          <div className="mt-6 pt-5 border-t border-border-lighter dark:border-white/10 space-y-2.5 text-xs sm:text-sm text-ash">
+          <div className={"mt-6 pt-5 border-t border-border-lighter dark:border-white/10 space-y-2.5 text-xs sm:text-sm text-ash" + v5Class('service')}>
+            {!isV5 && (<>
             <div className="flex items-center justify-between">
               <span>Доставка: по России от 2 дней</span>
               <a
@@ -779,6 +790,7 @@ export function ProductPresentationCore({
                 Условия →
               </a>
             </div>
+            </>)}
             {product.sellerName && (
               <div className="flex items-center justify-between">
                 <span>Продавец: <strong className="text-graphite dark:text-white font-medium">{product.sellerName}</strong></span>
@@ -800,7 +812,7 @@ export function ProductPresentationCore({
       </div>
 
       {/* FULL-WIDTH PRODUCT INFORMATION SECTION (BELOW HERO) */}
-      <div className="mt-12 min-[1200px]:mt-16 pt-8 min-[1200px]:pt-12 border-t border-border-lighter dark:border-white/10">
+      <div className={"mt-12 min-[1200px]:mt-16 pt-8 min-[1200px]:pt-12 border-t border-border-lighter dark:border-white/10" + v5Class('info')}>
         {/* Top 2-Column Overview */}
         <div className="grid grid-cols-1 min-[960px]:grid-cols-12 gap-8 lg:gap-12 mb-8">
           {/* Left / Larger: О вещи */}
@@ -891,7 +903,7 @@ export function ProductPresentationCore({
           <AccordionSection title="Доставка и возврат" defaultOpen={false}>
             <div className="space-y-2 py-1 text-xs sm:text-sm text-graphite-light dark:text-white/80">
               <p>• Бесплатная доставка от 10 000 ₽</p>
-              <p>• Доставка по России: 2–7 дней</p>
+              {!isV5 && <p>• Доставка по России: 2–7 дней</p>}
               <p>• Примерка и возврат в течение 14 дней</p>
               <a
                 href={returnsHref || undefined}
@@ -902,6 +914,17 @@ export function ProductPresentationCore({
               >
                 Подробнее об условиях возврата →
               </a>
+              {isV5 && (
+                <a
+                  href={deliveryHref || undefined}
+                  role={deliveryHref ? undefined : 'button'}
+                  tabIndex={deliveryHref ? undefined : 0}
+                  onClick={(e) => handleAnchorClick(e, onDeliveryClick)}
+                  className="block mt-2 text-graphite dark:text-white hover:underline font-medium cursor-pointer"
+                >
+                  Сроки и стоимость доставки →
+                </a>
+              )}
             </div>
           </AccordionSection>
         </div>

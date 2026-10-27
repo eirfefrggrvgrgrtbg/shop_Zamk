@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
@@ -18,6 +18,7 @@ import {
   isVariantBuyable,
   PRODUCT_JUST_SOLD_OUT_NOTICE,
   REFRESH_ERROR_NOTICE,
+  type ProductVariantItem,
 } from '../lib/variantSelection';
 import {
   validateVariantUrlState,
@@ -37,7 +38,27 @@ import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import type { GalleryMediaItem } from '../lib/mediaFocus';
 
-export function ProductDetail() {
+interface ProductDetailProps {
+  /** 'v5' swaps only the visual layer (dev preview route); data flow and purchase logic are the same. */
+  presentation?: 'default' | 'v5';
+  /**
+   * V5-only content supplied by the dev-only wrapper, so that none of it is imported by (or bundled with) the
+   * production PDP. Without these slots a 'v5' page simply renders the plain parts.
+   */
+  v5Slots?: ProductDetailV5Slots;
+}
+
+export interface ProductDetailV5Slots {
+  /** Whole-page loading layout. */
+  loading?: ReactNode;
+  /** Label above the brand line (also used on the error state). */
+  archive?: ReactNode;
+  /** Paper tag under the purchase row; receives the current product and the unambiguously selected variant. */
+  passport?: (ctx: { product: Product; selectedVariant: Pick<ProductVariantItem, 'sellerSku'> | null }) => ReactNode;
+}
+
+export function ProductDetail({ presentation = 'default', v5Slots }: ProductDetailProps = {}) {
+  const isV5 = presentation === 'v5';
   const { id, token } = useParams<{ id?: string; token?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -270,6 +291,15 @@ export function ProductDetail() {
     setSearchParams,
   ]);
 
+  if (isLoading && isV5 && v5Slots?.loading) {
+    return (
+      <>
+        {token && <PreviewPageMetadata />}
+        {v5Slots.loading}
+      </>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="relative z-10 min-h-screen pt-36 pb-20 flex justify-center">
@@ -281,9 +311,10 @@ export function ProductDetail() {
 
   if (error || !product) {
     return (
-      <div className="relative z-10 min-h-screen pt-36 pb-20">
+      <div className={cn('relative z-10 min-h-screen pt-36 pb-20', isV5 && 'zv5-pdp zv5-state')} data-testid={isV5 ? 'v5-pdp-error' : undefined}>
         {token && <PreviewPageMetadata />}
         <div className="container mx-auto px-4 sm:px-6 max-w-4xl text-center">
+          {isV5 && v5Slots?.archive}
           <h1 className="text-4xl font-serif text-graphite dark:text-white">{error || 'Товар не найден'}</h1>
           <Link to="/catalog" className="inline-block mt-6">
             <Button>Вернуться в каталог</Button>
@@ -511,7 +542,7 @@ export function ProductDetail() {
   const reviewsCountText = hasReviews ? `${product.reviewsCount ?? (reviews ? reviews.length : 0)} ${formatReviewsCount(product.reviewsCount ?? (reviews ? reviews.length : 0))}` : undefined;
 
   return (
-    <div className="relative z-10 min-h-screen pt-20 md:pt-24 pb-20">
+    <div className={cn('relative z-10 min-h-screen pt-20 md:pt-24 pb-20', isV5 && 'zv5-pdp')} data-testid={isV5 ? 'v5-pdp' : undefined}>
       {token && <PreviewPageMetadata />}
       {product.isPreview && (
         <div className="bg-amber-500 text-slate-950 font-bold px-4 py-3 text-center text-xs sm:text-sm sticky top-16 z-40 shadow-md flex items-center justify-center gap-2 mb-4">
@@ -519,20 +550,20 @@ export function ProductDetail() {
         </div>
       )}
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[1324px]">
+      <div className={cn('container mx-auto px-4 sm:px-6 lg:px-8', isV5 ? 'max-w-[1400px]' : 'max-w-[1324px]')}>
         {/* Breadcrumbs */}
-        <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6">
-          <nav className="flex items-center gap-2 text-xs sm:text-sm text-ash flex-wrap">
+        <div className={cn('flex items-start justify-between gap-3 mb-5 sm:mb-6', isV5 && 'zv5-crumbs')}>
+          <nav className="flex items-center gap-2 text-xs sm:text-sm text-ash flex-wrap" aria-label={isV5 ? 'Навигационная цепочка' : undefined}>
             <Link to="/" className="hover:text-graphite dark:hover:text-white transition-colors">Главная</Link>
             <ChevronRight className="w-3.5 h-3.5" />
             <Link to="/catalog" className="hover:text-graphite dark:hover:text-white transition-colors">Каталог</Link>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-graphite dark:text-white line-clamp-1">{product.name}</span>
+            <span className={cn('text-graphite dark:text-white line-clamp-1', isV5 && 'zv5-crumb-current')} aria-current={isV5 ? 'page' : undefined}>{product.name}</span>
           </nav>
           {!token && <ShareProductButton title={product.name} />}
         </div>
 
-        <div className="bg-white dark:bg-[#121214] border border-border-lighter/70 dark:border-white/5 rounded-2xl p-5 sm:p-7 min-[1200px]:p-8 shadow-xs">
+        <div className={isV5 ? 'zv5-shell' : 'bg-white dark:bg-[#121214] border border-border-lighter/70 dark:border-white/5 rounded-2xl p-5 sm:p-7 min-[1200px]:p-8 shadow-xs'}>
           <ProductPresentationCore
             product={product}
             visibleImages={visibleImages}
@@ -580,6 +611,9 @@ export function ProductDetail() {
             onDeliveryClick={() => navigate('/delivery')}
             onReturnsClick={() => navigate('/returns')}
             onSellerClick={(sellerSlug) => navigate(`/seller/${sellerSlug}`)}
+            presentation={presentation}
+            archiveSlot={isV5 ? v5Slots?.archive : undefined}
+            passportSlot={isV5 ? v5Slots?.passport?.({ product, selectedVariant }) : undefined}
           />
         </div>
 

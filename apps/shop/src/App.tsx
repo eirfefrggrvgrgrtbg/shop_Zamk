@@ -62,6 +62,11 @@ const ShopV5Home = import.meta.env.DEV
   ? lazy(() => import('./components/v5-home/ShopV5Home').then((m) => ({ default: m.ShopV5Home })))
   : null;
 
+// Dev-only Shop V5 PDP preview: the production ProductDetail data flow with the V5 presentation (not mounted in production builds).
+const ShopV5ProductDetail = import.meta.env.DEV
+  ? lazy(() => import('./components/product-detail/ShopV5ProductDetail').then((m) => ({ default: m.ShopV5ProductDetail })))
+  : null;
+
 /** The V5 preview brings its own header/footer, so it renders outside the shared Layout. */
 function ShellSwitch({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
@@ -148,6 +153,16 @@ function App() {
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/zamk" element={<DirectSale />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
+                    {ShopV5ProductDetail && (
+                      <Route
+                        path="/v5-pdp-preview/:id"
+                        element={
+                          <Suspense fallback={null}>
+                            <ShopV5ProductDetail />
+                          </Suspense>
+                        }
+                      />
+                    )}
                     <Route path="/preview/products/:token" element={<ProductDetail />} />
                     <Route path="/preview/products/:token/card" element={<ProductCardPreview />} />
                     <Route path="/auction" element={<AuctionPage />} />

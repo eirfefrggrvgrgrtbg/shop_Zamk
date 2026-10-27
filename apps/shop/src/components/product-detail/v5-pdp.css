@@ -1,0 +1,168 @@
+/* ZAMK Shop V5 product page. Everything is scoped under .zv5-pdp: the production PDP and Seller Studio preview are untouched.
+   Unlayered rules on purpose: they win over the Tailwind utility layer on the shared presentation core's elements. */
+
+.zv5-pdp {
+  --zp-ink: var(--color-graphite);
+  --zp-mute: var(--color-graphite-light);
+  --zp-rule: rgba(28, 39, 51, 0.16);
+  --zp-stage: #efede9;
+  --zp-paper: #f4f4f4;
+  --zp-paper-ink: #1c2733;
+  --zp-paper-mute: #5f7085;
+  --zp-paper-rule: #b9c2cc;
+  --zp-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+.dark .zv5-pdp {
+  --zp-rule: rgba(244, 246, 248, 0.16);
+  --zp-stage: #17181a;
+  --zp-paper: #18181b;
+  --zp-paper-ink: #f4f4f5;
+  --zp-paper-mute: #a1a1aa;
+  --zp-paper-rule: #52525b;
+}
+
+/* ---- calm reading surface: a soft local layer under the content, no blur, the Shop background stays visible at the top and edges ---- */
+.zv5-pdp { --zp-surface: rgba(251, 252, 254, 0.9); }
+.dark .zv5-pdp { --zp-surface: rgba(11, 12, 14, 0.88); }
+.zv5-pdp::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0, transparent 72px, var(--zp-surface) 200px, var(--zp-surface) calc(100% - 140px), transparent 100%);
+}
+
+.zv5-shell { padding: 0; }
+
+/* ---- labels ---- */
+.zv5-archive {
+  margin: 0 0 14px; font-family: var(--zp-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--zp-mute);
+}
+.zv5-pdp .zv5-brand { font-family: var(--zp-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--zp-mute); }
+.zv5-pdp a.zv5-brand:hover { color: var(--zp-ink); }
+.zv5-pdp .zv5-title {
+  margin-top: 8px; font-family: var(--font-serif); font-weight: 400; color: var(--zp-ink);
+  font-size: clamp(34px, 3.4vw, 54px); line-height: 1.04; letter-spacing: -0.005em; text-wrap: balance; overflow-wrap: anywhere;
+}
+.zv5-pdp .zv5-rating { margin-top: 12px; }
+.zv5-pdp .zv5-price { margin-top: 18px; }
+.zv5-pdp .zv5-price span:first-child { font-size: clamp(28px, 2.4vw, 34px); font-weight: 600; letter-spacing: -0.01em; }
+
+/* ---- layout: desktop = one composition, gallery ~57% / purchase ~43% ---- */
+.zv5-pdp .zv5-grid { gap: clamp(28px, 4vw, 72px); align-items: start; }
+@media (min-width: 960px) {
+  .zv5-pdp .zv5-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .zv5-pdp .zv5-buy { position: sticky; top: 104px; max-width: 560px; }
+}
+
+/* ---- gallery: no outer box, the photo sets the width of its column ---- */
+.zv5-pdp .zv5-gallery-col { max-width: none; margin: 0; }
+.zv5-pdp .zv5-stage {
+  max-height: none; aspect-ratio: 3 / 4; border: 0; border-radius: 0; background: var(--zp-stage);
+}
+.zv5-pdp .zv5-stage img { object-fit: contain; }
+.zv5-pdp .zv5-thumbs { gap: 8px; padding-top: 4px; }
+.zv5-pdp .zv5-thumb { width: 60px; height: 76px; border-radius: 0; padding: 0; background: var(--zp-stage); }
+.zv5-pdp .zv5-thumb img { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; }
+
+/* ---- colour / size: same semantics, squarer V5 look ---- */
+.zv5-pdp .zv5-buy [data-testid^='size-button-'] {
+  min-width: 56px; height: 48px; padding: 0 14px; border-radius: 2px; font-family: var(--zp-mono); font-size: 13px; letter-spacing: 0.06em;
+}
+.zv5-pdp .zv5-buy [data-testid='add-to-cart-button'] {
+  height: 56px; border-radius: 2px; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.zv5-pdp .zv5-buy [data-testid='add-to-cart-button'] + button { height: 56px; width: 56px; border-radius: 2px; }
+
+/* ---- passport ---- */
+.zv5-passport {
+  position: relative; margin-top: 26px; max-width: 420px; padding: 16px 18px 14px; background: var(--zp-paper); color: var(--zp-paper-ink);
+  border: 1px solid var(--zp-paper-rule); border-radius: 2px; font-family: var(--zp-mono); box-shadow: 0 10px 24px rgba(28, 39, 51, 0.08);
+  transform: rotate(-0.4deg);
+}
+.zv5-passport::before {
+  content: ''; position: absolute; left: 50%; top: 6px; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%; border: 1px solid var(--zp-paper-rule);
+}
+.zv5-passport__head {
+  display: flex; justify-content: space-between; gap: 12px; margin: 6px 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--zp-paper-rule);
+  font-size: 10px; letter-spacing: 0.16em; color: var(--zp-paper-mute);
+}
+.zv5-passport__rows { margin: 0; }
+.zv5-passport__row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; padding: 3px 0; font-size: 12px; line-height: 1.45; }
+.zv5-passport__row dt { margin: 0; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; color: var(--zp-paper-mute); padding-top: 2px; }
+.zv5-passport__row dd { margin: 0; overflow-wrap: anywhere; }
+.zv5-passport__bars {
+  display: block; height: 12px; width: 38%; margin-top: 12px; opacity: 0.45; color: var(--zp-paper-ink);
+  background: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 3px, currentColor 3px 5px, transparent 5px 6px, currentColor 6px 7px, transparent 7px 10px);
+}
+
+/* ---- service + information ---- */
+.zv5-pdp .zv5-service { margin-top: 22px; border-top-style: dashed; border-color: var(--zp-rule); }
+.zv5-pdp .zv5-info { margin-top: 64px; padding-top: 44px; border-color: var(--zp-rule); }
+.zv5-pdp .zv5-info h2 { font-family: var(--font-serif); font-weight: 400; font-size: clamp(26px, 2.4vw, 34px); line-height: 1.1; margin-bottom: 14px; color: var(--zp-ink); }
+.zv5-pdp .zv5-info [data-slot='description'],
+.zv5-pdp .zv5-info .leading-relaxed { font-size: 15px; line-height: 1.75; }
+.zv5-pdp .zv5-info button > span { font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
+.zv5-pdp .zv5-info .border-b { border-color: var(--zp-rule); }
+.zv5-pdp #product-reviews-section h2 { font-size: clamp(26px, 2.4vw, 34px); font-weight: 400; }
+
+/* ---- loading skeleton: same grid as the page, no fake product data ---- */
+.zv5-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.zv5-skel-page { position: relative; z-index: 10; min-height: 100vh; padding-top: 80px; padding-bottom: 80px; }
+@media (min-width: 768px) { .zv5-skel-page { padding-top: 96px; } }
+.zv5-skel { background: rgba(28, 39, 51, 0.09); border-radius: 2px; animation: zv5-pulse 1.6s ease-in-out infinite; }
+.dark .zv5-skel { background: rgba(244, 246, 248, 0.08); }
+@keyframes zv5-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.zv5-skel-crumbs { height: 16px; width: 200px; max-width: 60%; margin-bottom: 24px; }
+.zv5-skel-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.zv5-skel-head, .zv5-skel-buy { display: flex; flex-direction: column; gap: 14px; }
+.zv5-skel-head { margin-bottom: 18px; }
+.zv5-skel-gallery { margin-bottom: 18px; }
+.zv5-skel-stage { width: 100%; aspect-ratio: 3 / 4; }
+.zv5-skel-thumbs { display: flex; gap: 8px; margin-top: 12px; }
+.zv5-skel-thumb { width: 60px; height: 76px; }
+.zv5-skel-line { height: 14px; }
+.zv5-skel-line--s { width: 28%; }
+.zv5-skel-line--m { width: 40%; height: 28px; }
+.zv5-skel-line--title { width: 78%; height: 44px; }
+.zv5-skel-options { height: 112px; width: 100%; }
+.zv5-skel-cta { height: 56px; width: 100%; }
+@media (min-width: 960px) {
+  .zv5-skel-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); column-gap: clamp(28px, 4vw, 72px);
+    grid-template-areas: 'gallery head' 'gallery buy'; grid-template-rows: auto 1fr; align-items: start;
+  }
+  .zv5-skel-gallery { grid-area: gallery; margin-bottom: 0; }
+  .zv5-skel-head { grid-area: head; margin-bottom: 24px; }
+  .zv5-skel-buy { grid-area: buy; max-width: 560px; }
+}
+@media (prefers-reduced-motion: reduce) { .zv5-skel { animation: none; } }
+
+/* ---- states ---- */
+.zv5-state { text-align: center; }
+.zv5-state .zv5-archive { margin-bottom: 10px; }
+
+/* ---- mobile: brand → title → price → photo → options → buy (one column, no sticky bar) ---- */
+@media (max-width: 959px) {
+  /* compact top: the full title stays as the heading, so the breadcrumb drops its duplicate (kept for screen readers) */
+  .zv5-pdp .zv5-crumbs { margin-bottom: 12px; align-items: center; }
+  .zv5-pdp .zv5-crumb-current {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .zv5-pdp .zv5-crumbs nav > svg:last-of-type { display: none; }
+  .zv5-pdp .zv5-crumbs button[aria-label='Поделиться товаром'] { min-width: 44px; min-height: 44px; justify-content: center; margin: -8px -8px -8px 0; }
+  .zv5-pdp .zv5-crumbs button[aria-label='Поделиться товаром'] > span { display: none; }
+  .zv5-pdp .zv5-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .zv5-pdp .zv5-buy { display: contents; position: static; max-width: none; }
+  .zv5-pdp .zv5-buy > * { order: 7; }
+  .zv5-pdp .zv5-buy > .zv5-archive { order: 1; margin-bottom: 4px; }
+  .zv5-pdp .zv5-buy > .zv5-brand { order: 2; }
+  .zv5-pdp .zv5-buy > .zv5-brand { margin-top: 0; }
+  .zv5-pdp .zv5-buy > .zv5-title { order: 3; margin-top: 4px; font-size: clamp(26px, 7vw, 34px); line-height: 1.02; letter-spacing: -0.01em; hyphens: auto; -webkit-hyphens: auto; }
+  .zv5-pdp .zv5-buy > .zv5-rating { order: 4; margin-top: 8px; }
+  .zv5-pdp .zv5-buy > .zv5-price { order: 5; margin-top: 8px; }
+  .zv5-pdp .zv5-gallery { order: 6; margin-top: 14px; margin-bottom: 4px; }
+  .zv5-pdp .zv5-thumbs { gap: 6px; }
+  .zv5-pdp .zv5-thumb { width: 44px; height: 56px; }
+  .zv5-pdp .zv5-passport { max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zv5-pdp .zv5-passport { transform: none; }
+}
