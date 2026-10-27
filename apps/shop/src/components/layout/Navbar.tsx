@@ -55,16 +55,18 @@ export function Navbar() {
                 : 'bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/30 dark:border-white/5 shadow-[0_2px_16px_rgba(120,155,190,0.10),0_1px_0_rgba(255,255,255,0.6)_inset] dark:shadow-[0_2px_16px_rgba(0,0,0,0.2),0_1px_0_rgba(255,255,255,0.02)_inset]'
             }`}>
 
-            {/* Mobile burger */}
+            {/* Burger: inline links need ~1024px next to the centered logo; below that they live in the drawer */}
             <button
-              className="md:hidden p-2 -ml-1 text-graphite/70 dark:text-white/70 hover:text-graphite dark:hover:text-white transition-colors"
+              type="button"
+              aria-label="Открыть меню"
+              className="lg:hidden p-2 -ml-1 text-graphite/70 dark:text-white/70 hover:text-graphite dark:hover:text-white transition-colors"
               onClick={() => setIsMobileMenuOpen(true)}
             >
               <Menu className="w-[18px] h-[18px]" />
             </button>
 
             {/* Left nav links */}
-            <nav className="hidden md:flex items-center gap-8 lg:gap-10 flex-1">
+            <nav className="hidden lg:flex items-center gap-10 flex-1" aria-label="Основная навигация">
               {navLinks.map((link) => (
                 <Link
                   key={link.to}

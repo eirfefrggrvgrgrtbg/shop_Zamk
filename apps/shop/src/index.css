@@ -119,6 +119,12 @@
   html {
     scroll-behavior: smooth;
   }
+  /* the fixed mobile bottom bar (md:hidden) must not cover a focused or scrolled-to element */
+  @media (max-width: 767px) {
+    html {
+      scroll-padding-bottom: 6rem;
+    }
+  }
 
   body {
     @apply bg-ice text-graphite font-sans antialiased selection:bg-accent/20 selection:text-graphite;

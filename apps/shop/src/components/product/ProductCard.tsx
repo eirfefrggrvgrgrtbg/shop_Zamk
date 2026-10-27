@@ -150,7 +150,9 @@ export function ProductCard({ product, previewUrl, placement = 'catalog_grid' }:
                   showToast(favorited ? 'Удалено из избранного' : 'Добавлено в избранное');
                 }}
                 aria-label={favorited ? 'Убрать из избранного' : 'Добавить в избранное'}
-                className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-sm border border-white/20 text-graphite dark:text-white hover:scale-110 transition-all z-10 opacity-0 group-hover:opacity-100"
+                aria-pressed={favorited}
+                data-testid="catalog-card-favorite"
+                className="absolute top-3 left-3 w-8 h-8 pointer-coarse:w-11 pointer-coarse:h-11 flex items-center justify-center rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-sm border border-white/20 text-graphite dark:text-white hover:scale-110 transition-all z-10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 [@media(hover:none)]:opacity-100"
               >
                 <Heart className={cn("w-4 h-4 transition-colors", favorited && "fill-red-500 text-red-500")} />
               </button>
@@ -162,7 +164,8 @@ export function ProductCard({ product, previewUrl, placement = 'catalog_grid' }:
                 type="button"
                 onClick={handleQuickBuyClick}
                 aria-label="Быстрая покупка"
-                className="absolute bottom-3 right-3 w-10 h-10 flex items-center justify-center transition-all duration-300 z-20 rounded-full backdrop-blur-md bg-white/70 dark:bg-black/50 text-graphite dark:text-white hover:bg-white dark:hover:bg-black hover:scale-110 shadow-sm opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0"
+                data-testid="catalog-card-quick-buy"
+                className="absolute bottom-3 right-3 w-10 h-10 pointer-coarse:w-11 pointer-coarse:h-11 flex items-center justify-center transition-all duration-300 z-20 rounded-full backdrop-blur-md bg-white/70 dark:bg-black/50 text-graphite dark:text-white hover:bg-white dark:hover:bg-black hover:scale-110 shadow-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 translate-y-2 group-hover:translate-y-0 group-focus-within:translate-y-0 focus-visible:translate-y-0 pointer-coarse:opacity-100 pointer-coarse:translate-y-0 [@media(hover:none)]:opacity-100 [@media(hover:none)]:translate-y-0"
               >
                 <ShoppingCart className="w-4 h-4" />
               </button>

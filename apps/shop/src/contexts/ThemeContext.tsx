@@ -12,7 +12,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('zamk_theme') as Theme) || 'system';
+    // Light is the default for visitors who never chose a theme; a stored choice (incl. an explicit 'system') wins.
+    return (localStorage.getItem('zamk_theme') as Theme) || 'light';
   });
 
   const [isDark, setIsDark] = useState(false);
