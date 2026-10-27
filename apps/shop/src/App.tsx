@@ -41,7 +41,7 @@ import { Privacy } from './pages/Privacy';
 import { AuctionPage } from './pages/Auction';
 import { AuctionLotDetail } from './pages/AuctionLotDetail';
 import { AuctionWins } from './pages/AuctionWins';
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import {
   startBehaviorTracking,
   stopBehaviorTracking,
@@ -55,6 +55,25 @@ import {
   markSessionStartedEmitted,
 } from './lib/behavior';
 import type { AttributionMetadata } from '@zamk/api-client/src/behavior';
+
+// Dev-only Shop V5 home preview. The condition is a build-time constant, so production bundles drop it entirely.
+const V5_PREVIEW_PATH = '/v5-preview';
+const ShopV5Home = import.meta.env.DEV
+  ? lazy(() => import('./components/v5-home/ShopV5Home').then((m) => ({ default: m.ShopV5Home })))
+  : null;
+
+/** The V5 preview brings its own header/footer, so it renders outside the shared Layout. */
+function ShellSwitch({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  if (ShopV5Home && pathname === V5_PREVIEW_PATH) {
+    return (
+      <Suspense fallback={null}>
+        <ShopV5Home />
+      </Suspense>
+    );
+  }
+  return <Layout>{children}</Layout>;
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -123,7 +142,7 @@ function App() {
               <Router>
                 <ScrollToTop />
                 <BehaviorRouterTracker />
-                <Layout>
+                <ShellSwitch>
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/catalog" element={<Catalog />} />
@@ -161,7 +180,7 @@ function App() {
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="*" element={<Home />} />
                   </Routes>
-                </Layout>
+                </ShellSwitch>
                 <AuthModal />
                 <SearchOverlay />
               </Router>
